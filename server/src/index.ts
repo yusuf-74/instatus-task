@@ -223,6 +223,52 @@ app.post('/api/v1/events/', [verifyToken], async (req: any, res: any) => {
     res.status(201).json(event);
 })
 
+app.post('/api/v1/events/generate/', [verifyToken], async (req: any, res: any) => {
+    if (!req.user || !req.user.user.isSuperUser) {
+        console.log(req.user);
+        return res.status(403).json({ message: 'You are not authorized to perform this action' });
+    }
+    const { count = 50 } = req.body;
+    const availableActions = await prismaClient.actions.findMany();
+    const availableActors = await prismaClient.users.findMany();
+    const availableTargets = availableActors;
+    const events = [];
+
+    for (let i = 0; i < count; i++) {
+        const actor = availableActors[Math.floor(Math.random() * availableActors.length)];
+        const action = availableActions[Math.floor(Math.random() * availableActions.length)];
+        let target: any = availableTargets[Math.floor(Math.random() * availableTargets.length)];
+
+        // Ensure that the actor and target are not the same
+        if (actor.id === target.id) {
+            // drop the target 
+            target = null
+        }
+
+        const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+        const location = ip
+        events.push({
+            id: `event_${uuid()}`,
+            actorId: actor.id,
+            actionId: action.id,
+            targetId: target?.id,
+            location
+        });
+    }
+    await prismaClient.events.createMany({
+        data: events
+    });
+
+    res.status(201).json({ message: 'Events generated' });
+})
+
+app.delete('/api/v1/events/reset/', [verifyToken], async (req: any, res: any) => {
+    if (!req.user || !req.user.user.isSuperUser) {
+        return res.status(403).json({ message: 'You are not authorized to perform this action' });
+    }
+    await prismaClient.events.deleteMany();
+    res.status(204);
+})
 
 app.get('/api/v1/actions/', [verifyToken], async (req: any, res: any) => {
     const actions = await prismaClient.actions.findMany();
