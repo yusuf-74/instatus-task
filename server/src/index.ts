@@ -109,6 +109,125 @@ app.get('/api/v1/auth/users/', [verifyToken], async (req: any, res: any) => {
 })
 
 
+app.get('/api/v1/events/', [verifyToken], async (req: any, res: any) => {
+    if (!req.user) {
+        return res.status(401).json({ message: 'Unauthorized' });
+    }
+    let { page = 1, limit = 10, actorId, actionId, targetId, actorName, actionName, targetName, query } = req.query;
+    const filters = [
+        actorName && {
+            OR: [
+                { actor: { firstName: { contains: actorName, mode: 'insensitive' } } },
+                { actor: { lastName: { contains: actorName, mode: 'insensitive' } } },
+            ]
+        },
+        actionName && { action: { name: { contains: actionName, mode: 'insensitive' } } },
+        targetName && {
+            OR: [
+                { target: { firstName: { contains: targetName, mode: 'insensitive' } } },
+                { target: { lastName: { contains: targetName, mode: 'insensitive' } } },
+            ]
+        },
+        query && {
+            OR: [
+                { actor: { firstName: { contains: query, mode: 'insensitive' } } },
+                { actor: { lastName: { contains: query, mode: 'insensitive' } } },
+                { action: { name: { contains: query, mode: 'insensitive' } } },
+                { target: { firstName: { contains: query, mode: 'insensitive' } } },
+                { target: { lastName: { contains: query, mode: 'insensitive' } } }
+            ]
+        }
+    ].filter(Boolean);
+
+    const events = await prismaClient.events.findMany({
+        where: {
+            AND: [
+                {
+                    actorId: actorId ?? undefined,
+                    actionId: actionId ?? undefined,
+                    targetId: targetId ?? undefined,
+                },
+                filters.length > 0 ? { OR: filters } : {}
+            ]
+        },
+        include: {
+            actor: {
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true
+                }
+            },
+            action: {
+                select: {
+                    id: true,
+                    name: true
+                }
+            },
+            target: {
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true
+                }
+            }
+        },
+        skip: (parseInt(page as string, 10) - 1) * parseInt(limit as string, 10),
+        take: parseInt(limit as string, 10),
+        orderBy: [
+            { occurredAt: 'desc' },
+            { id: 'asc' }
+        ],
+    });
+
+    // count the total number of filtered events
+    const allEveentsCount = await prismaClient.events.count({
+        where: {
+            AND: [
+                {
+                    actorId: actorId ?? undefined,
+                    actionId: actionId ?? undefined,
+                    targetId: targetId ?? undefined,
+                },
+                filters.length > 0 ? { OR: filters } : {}
+            ]
+        }
+    });
+
+    res.status(200).json({
+        previous: parseInt(page) > 1 ? `${req.protocol}://${req.get('host')}${req.originalUrl}?page=${parseInt(page) - 1}&limit=${limit}` : null,
+        next: allEveentsCount > (parseInt(page) * parseInt(limit)) ? `${req.protocol}://${req.get('host')}${req.originalUrl}?page=${parseInt(page) + 1}&limit=${limit}` : null,
+        data: events
+    });
+})
+
+app.post('/api/v1/events/', [verifyToken], async (req: any, res: any) => {
+    if (!req.user || !req.user.user.isSuperUser) {
+        return res.status(403).json({ message: 'You are not authorized to perform this action' });
+    }
+    const { actorId, actionId, targetId } = req.body;
+    // get remote ip address
+    const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    const location = ip
+    const event = await prismaClient.events.create({
+        data: {
+            id: `event_${uuid()}`,
+            actorId,
+            actionId,
+            targetId,
+            location
+        }
+    });
+    res.status(201).json(event);
+})
+
+
+app.get('/api/v1/actions/', [verifyToken], async (req: any, res: any) => {
+    const actions = await prismaClient.actions.findMany();
+    res.status(200).json(actions);
+})
 
 
 app.listen(PORT, () => {
