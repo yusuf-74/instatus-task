@@ -1,0 +1,99 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Users {
+  id              String            @id
+  email           String            @unique
+  firstName       String
+  lastName        String
+  password        String
+  role            String            @default("USER")
+  isSuperUser     Boolean           @default(false)
+  isActive        Boolean           @default(true)
+  actionsMade     Events[]          @relation("actor")
+  actionsReceived Events[]          @relation("target")
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  permissions     UserPermissions[]
+  groups          UserGroups[]
+}
+
+model Permissions {
+  id          String             @id @default(cuid())
+  name        String
+  description String
+  groups      GroupPermissions[]
+  users       UserPermissions[]
+}
+
+model Groups {
+  id          String             @id @default(cuid())
+  name        String
+  description String
+  permissions GroupPermissions[]
+  users       UserGroups[]
+}
+
+model GroupPermissions {
+  id           String      @id @default(cuid())
+  groupId      String
+  group        Groups      @relation(fields: [groupId], references: [id])
+  permissionId String
+  permission   Permissions @relation(fields: [permissionId], references: [id])
+}
+
+model UserGroups {
+  id      String @id @default(cuid())
+  userId  String
+  user    Users  @relation(fields: [userId], references: [id])
+  groupId String
+  group   Groups @relation(fields: [groupId], references: [id])
+}
+
+model UserPermissions {
+  id           String      @id @default(cuid())
+  userId       String
+  user         Users       @relation(fields: [userId], references: [id])
+  permissionId String
+  permission   Permissions @relation(fields: [permissionId], references: [id])
+}
+
+model Actions {
+  id            String       @id
+  name          String
+  description   String
+  actionGroupId String
+  actionGroup   ActionGroups @relation(fields: [actionGroupId], references: [id])
+  events        Events[]
+}
+
+model ActionGroups {
+  id          String    @id
+  name        String
+  description String
+  actions     Actions[]
+}
+
+model Events {
+  id         String   @id
+  actorId    String
+  actor      Users    @relation(fields: [actorId], references: [id], name: "actor")
+  actionId   String
+  action     Actions  @relation(fields: [actionId], references: [id])
+  targetId   String?
+  target     Users?   @relation(fields: [targetId], references: [id], name: "target")
+  occurredAt DateTime @default(now())
+  location   String
+}
