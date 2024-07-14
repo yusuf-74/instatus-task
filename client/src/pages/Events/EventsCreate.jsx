@@ -79,6 +79,7 @@ const EventsCreate = () => {
   const handleReset = () => {
     ResetMutation.mutate();
     toast.success('Events reset successfully');
+    queryClient.invalidateQueries('events', { exact: false });
     setResetModalOpen(false);
   };
 
